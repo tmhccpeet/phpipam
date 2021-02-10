@@ -23,13 +23,13 @@ __author__ = "Peet van de Sande"
 __contact__ = "pvandesande@tmhcc.com"
 __license__ = "GPLv3"
 
+import sys
 import argparse
-import csv
 import requests
 import json
-import urllib.parse
-import ipaddress
+import time
 
+starttime = time.time()
 config = {}
 regionalNetworks = {
         "us-east-1": 74,
@@ -41,19 +41,26 @@ regionalInternalDNS = {
         "us-east-1": 2,
         "eu-west-2": 3,
         "eu-west-1": 3,
-        "ap-southeast-2": 0
+        "ap-southeast-2": 2
 }
 SPOKESIZE = 22 # Supernet size for a standard spoke
 
-def load_config():
+def loadConfig():
     '''
     Load a configuration file
     '''
 
     global config
 
-    with open('config.json') as config_file:
-        config = json.load(config_file)
+    try:
+        with open('config.json') as config_file:
+            config = json.load(config_file)
+    except IOError:
+        try:
+            with open('/etc/netops/phpipam/config.json') as config_file:
+                config = json.load(config_file)
+        except IOError:
+            sys.exit(json.dumps({'code': 501, 'success': 'false', 'data': {'description': "Can't find config file."}}))
 
 def requestSubnet(masterId, size, description, nameserverId = 0, allowRequests = 1, position = 'first'):
     '''
@@ -68,6 +75,7 @@ def requestSubnet(masterId, size, description, nameserverId = 0, allowRequests =
     :return: JSON object with server response
     :rtype: str
     '''
+
     global config
     url = f"https://{config['server']}/api/{config['appid']}/subnets/{masterId}/{position}_subnet/{size}/"
     headers = {
@@ -93,6 +101,7 @@ def createFirstAddress(subnetId, description, isGateway = 0):
     :return: JSON object with server response
     :rtype: str
     '''
+
     global config
     url = f"https://{config['server']}/api/{config['appid']}/addresses/first_free/"
     headers = {
@@ -107,54 +116,85 @@ def createFirstAddress(subnetId, description, isGateway = 0):
 
     return requests.request("POST", url, headers=headers, data=payload).text
 
+def createSpoke(region, account, size = 22):
+    global config, regionalNetworks, regionalInternalDNS
+    output = {'code': 0, 'success': 'false'}
+    output['data'] = []
+
+    description = account + ' VpcCidr'
+    r = json.loads(requestSubnet(regionalNetworks[region], size, description, regionalInternalDNS[region]))
+    if r['code'] == 201:
+        tmp = {'id': r['id'], 'subnet': r['data'], 'description': description}
+        output['data'].append(tmp)
+
+        description = account + ' Private subnet AZ A'
+        privatea = json.loads(requestSubnet(r['id'], 24, description, regionalInternalDNS[region]))
+        tmp = {'id': privatea['id'], 'subnet': privatea['data'], 'description': description}
+        output['data'].append(tmp)
+        privatea_gw = json.loads(createFirstAddress(privatea['id'], 'Default gateway', 1))
+        privatea_dns = json.loads(createFirstAddress(privatea['id'], 'AWS DNS'))
+        privatea_res3 = json.loads(createFirstAddress(privatea['id'], 'Reserved by AWS'))
+
+        description = account + ' Private subnet AZ B'
+        privateb = json.loads(requestSubnet(r['id'], 24, description, regionalInternalDNS[region]))
+        tmp = {'id': privateb['id'], 'subnet': privateb['data'], 'description': description}
+        output['data'].append(tmp)
+        privateb_gw = json.loads(createFirstAddress(privateb['id'], 'Default gateway', 1))
+        privateb_res2 = json.loads(createFirstAddress(privateb['id'], 'Reserved by AWS'))
+        privateb_res3 = json.loads(createFirstAddress(privateb['id'], 'Reserved by AWS'))
+
+        description = account + ' Transit subnet AZ B'
+        transitb = json.loads(requestSubnet(r['id'], 28, description, 0, 0, 'last'))
+        tmp = {'id': transitb['id'], 'subnet': transitb['data'], 'description': description}
+        output['data'].append(tmp)
+        transitb_gw = json.loads(createFirstAddress(transitb['id'], 'Default gateway', 1))
+
+        description = account + ' Transit subnet AZ A'
+        transita = json.loads(requestSubnet(r['id'], 28, description, 0, 0, 'last'))
+        tmp = {'id': transita['id'], 'subnet': transita['data'], 'description': description}
+        output['data'].append(tmp)
+        transita_gw = json.loads(createFirstAddress(transita['id'], 'Default gateway', 1))
+        output['code'] = 200
+        output['success'] = 'true'
+    else:
+        output['code'] = 500
+        output['success'] = 'false'
+    return output
 
 def main():
     '''
     Main script logic
     '''
-    load_config()
+
+    loadConfig()
 
     global config, regionalNetworks, regionalInternalDNS
 
     # Read input arguments
-    argp = argparse.ArgumentParser(description = 'Create spoke network.')
-    argp.add_argument('--region', type=str, nargs=1, help='AWS region where the spoke resides')
-    argp.add_argument('--description', type=str, nargs=1, help='Short description of the spoke')
+    argp = argparse.ArgumentParser(description = 'Create spoke network, request IP addresses from phpIPAM.')
+    argp.add_argument('region', type=str, nargs=1, help='AWS region where the spoke resides')
+    argp.add_argument('account', type=str, nargs=1, help='Account name')
     args = argp.parse_args()
     region = args.region[0]
-    description = args.description[0]
+    account = args.account[0]
 
-    r = json.loads(requestSubnet(regionalNetworks[region], SPOKESIZE, description, regionalInternalDNS[region]))
-    if r['code'] == 201:
-        print(f"Created subnet({r['id']}): {r['data']}")
+    output = {'code': 0, 'success': 'false'}
+    output['data'] = []
 
-        proda = json.loads(requestSubnet(r['id'], 24, description + ' Production AZ A', regionalInternalDNS[region]))
-        print(f"Created subnet({proda['id']}): {proda['data']}")
-        proda_gw = json.loads(createFirstAddress(proda['id'], 'Default gateway', 1))
-        print(f"Marked {proda_gw['data']} as default gateway")
-        proda_dns = json.loads(createFirstAddress(proda['id'], 'AWS DNS'))
-        print(f"Marked {proda_dns['data']} as AWS DNS")
-        proda_res3 = json.loads(createFirstAddress(proda['id'], 'Reserved by AWS'))
-        print(f"Marked {proda_res3['data']} as Reserved by AWS")
+    if region in regionalNetworks:
+        ipam = createSpoke(region, account, SPOKESIZE)
+        if ipam['code'] == 200:
+            output['code'] = 200
+            output['success'] = 'true'
+            output['data'] = ipam['data']
+        else:
+            output['code'] = 500
+            output['success'] = 'false'
+    else:
+        output['data'] = {'description': 'Region not defined or recognised.'}
 
-        prodb = json.loads(requestSubnet(r['id'], 24, description + ' Production AZ B', regionalInternalDNS[region]))
-        print(f"Created subnet({prodb['id']}): {prodb['data']}")
-        prodb_gw = json.loads(createFirstAddress(prodb['id'], 'Default gateway', 1))
-        print(f"Marked {prodb_gw['data']} as default gateway")
-        prodb_res2 = json.loads(createFirstAddress(prodb['id'], 'Reserved by AWS'))
-        print(f"Marked {prodb_res2['data']} as Reserved by AWS")
-        prodb_res3 = json.loads(createFirstAddress(prodb['id'], 'Reserved by AWS'))
-        print(f"Marked {prodb_res3['data']} as Reserved by AWS")
-
-        transitb = json.loads(requestSubnet(r['id'], 28, description + ' Transit AZ B', 0, 0, 'last'))
-        print(f"Created subnet({transitb['id']}): {transitb['data']}")
-        transitb_gw = json.loads(createFirstAddress(transitb['id'], 'Default gateway', 1))
-        print(f"Marked {transitb_gw['data']} as default gateway")
-
-        transita = json.loads(requestSubnet(r['id'], 28, description + ' Transit AZ A', 0, 0, 'last'))
-        print(f"Created subnet({transita['id']}): {transita['data']}")
-        transita_gw = json.loads(createFirstAddress(transita['id'], 'Default gateway', 1))
-        print(f"Marked {transita_gw['data']} as default gateway")
+    output['time'] = time.time() - starttime
+    return output
 
 if __name__ == "__main__":
-    main()
+    print(json.dumps(main()))

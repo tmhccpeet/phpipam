@@ -28,6 +28,7 @@ import argparse
 import requests
 import json
 import time
+from jinja2 import Template
 
 starttime = time.time()
 config = {}
@@ -117,6 +118,15 @@ def createFirstAddress(subnetId, description, isGateway = 0):
     return requests.request("POST", url, headers=headers, data=payload).text
 
 def createSpoke(region, account, size = 22):
+    '''
+    Calculate and create subnets plus reserved IP addresses
+
+    :param str region: AWS region
+    :param str account: Name of the account
+    :param int size: CIDR size of the VPC
+    :return: JSON object with server response
+    :rtype: str
+    '''
     global config, regionalNetworks, regionalInternalDNS
     output = {'code': 0, 'success': 'false'}
     output['data'] = []
@@ -161,6 +171,44 @@ def createSpoke(region, account, size = 22):
         output['success'] = 'false'
     return output
 
+def createCfYaml(region, account, ipam, template):
+    '''
+    Create a CloudFormation YAML file to create the VPC
+
+    :param str region: AWS region
+    :param str account: Account name
+    :param str ipam: Dictionary with subnets and related information
+    :param str template: YAML Template
+    :return: YAML
+    :rtype: str
+    '''
+
+    global config, regionalInternalDNS
+
+    url = f"https://{config['server']}/api/{config['appid']}/tools/nameservers/{regionalInternalDNS[region]}/"
+    headers = {
+            'token': config['token'],
+            'Content-Type': 'application/json'
+    }
+    payload = ''
+
+    r = json.loads(requests.request("GET", url, headers=headers, data=payload).text)
+    nameservers = r['data']['namesrv1'].split(';')
+    tpl = Template(template)
+    return tpl.render (
+        nameservers = nameservers,
+        account = account,
+        vpcCidr = ipam['data'][0]['subnet'],
+        privateAIp = ipam['data'][1]['subnet'],
+        privateADescription = ipam['data'][1]['description'],
+        privateBIp = ipam['data'][2]['subnet'],
+        privateBDescription = ipam['data'][2]['description'],
+        transitBIp = ipam['data'][3]['subnet'],
+        transitBDescription = ipam['data'][3]['description'],
+        transitAIp = ipam['data'][4]['subnet'],
+        transitADescription = ipam['data'][4]['description']
+    )
+
 def main():
     '''
     Main script logic
@@ -174,9 +222,11 @@ def main():
     argp = argparse.ArgumentParser(description = 'Create spoke network, request IP addresses from phpIPAM.')
     argp.add_argument('region', type=str, nargs=1, help='AWS region where the spoke resides')
     argp.add_argument('account', type=str, nargs=1, help='Account name')
+    argp.add_argument('template', type=str, nargs=1, help='Template file name')
     args = argp.parse_args()
     region = args.region[0]
     account = args.account[0]
+    template = args.template[0]
 
     output = {'code': 0, 'success': 'false'}
     output['data'] = []
@@ -187,6 +237,8 @@ def main():
             output['code'] = 200
             output['success'] = 'true'
             output['data'] = ipam['data']
+            with open(template) as infile:
+                output['yaml'] = createCfYaml(region, account, ipam, infile.read())
         else:
             output['code'] = 500
             output['success'] = 'false'

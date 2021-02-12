@@ -1,0 +1,151 @@
+Description:  This stack deploys a TMHCC Standard Spoke VPC for {{ account }},
+  with a pair of transit and private subnets spread across two Availability Zones.
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: {{ vpcCidr }}
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: {{ account }}
+
+  DHCPOptions:
+    Type: 'AWS::EC2::DHCPOptions'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: {{ account }}
+      DomainName: hcch.com
+      DomainNameServers:
+        {%- for nameserver in nameservers %}
+        - {{nameserver}}
+        {%- endfor %}
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ privateAIp }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ privateADescription }}
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ privateBIp }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ privateBDescription }}
+
+  TransitSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ transitAIp }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ transitADescription }}
+
+  TransitSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ transitBIp }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ transitBDescription }}
+
+  PrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: {{ account }} Private routes AZ A
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref PrivateSubnet1
+
+  TransitSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable1
+      SubnetId: !Ref TransitSubnet1
+
+  PrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: {{ account }} Private routes AZ B
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      SubnetId: !Ref PrivateSubnet2
+
+  TransitSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable2
+      SubnetId: !Ref TransitSubnet2
+
+Outputs:
+  VPC:
+    Description: AWS ID of the created VPC
+    Value: !Ref VPC
+
+  VpcCidr:
+    Description: The CIDR of the VPC
+    Value: {{ vpcCidr }}
+
+  PrivateSubnet1:
+    Description: AWS ID of the private subnet in the 1st Availability Zone
+    Value: !Ref PrivateSubnet1
+
+  PrivateSubnet1IP:
+    Description: Subnet of the private subnet in the 1st Availability Zone
+    Value: {{ privateAIp }}
+
+  PrivateSubnet2:
+    Description: AWS ID of the private subnet in the 2nd Availability Zone
+    Value: !Ref PrivateSubnet2
+
+  PrivateSubnet2IP:
+    Description: Subnet of the private subnet in the 2nd Availability Zone
+    Value: {{ privateBIp }}
+
+  TransitSubnet1:
+    Description: AWS ID of the transit subnet in the 1st Availability Zone
+    Value: !Ref TransitSubnet1
+
+  TransitSubnet1Ip:
+    Description: Subnet of the transit subnet in the 1st Availability Zone
+    Value: {{ transitAIp }}
+
+  TransitSubnet2:
+    Description: AWS ID of the transit subnet in the 2nd Availability Zone
+    Value: !Ref TransitSubnet2
+
+  TransitSubnet2Ip:
+    Description: Subnet of the transit subnet in the 2nd Availability Zone
+    Value: {{ transitBIp }}
+

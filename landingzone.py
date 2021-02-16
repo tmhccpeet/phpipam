@@ -119,11 +119,12 @@ def createFirstAddress(subnetId, description, isGateway = 0):
 
     return requests.request("POST", url, headers=headers, data=payload).text
 
-def createSsVpc(region):
+def createSsVpc(region, cvpn):
     '''
     Create subnets for the Shared Services VPC
 
     :param str region: region where we deploy the VPC
+    :param bool cvpn: whether to add subnets for CVPN firewalls
     :return: JSON object with server response
     :rtype: str
     '''
@@ -132,8 +133,8 @@ def createSsVpc(region):
     output = {'code': 0, 'success': 'false'}
     output['data'] = []
 
-    description = 'Shared Services VpcCidr'
-    r = json.loads(requestSubnet(regionalNetworks[region], 20, description, regionalInternalDNS[region]))
+    description = 'Shared Services'
+    r = json.loads(requestSubnet(regionalNetworks[region], 20, description + ' VpcCidr', regionalInternalDNS[region]))
     if r['code'] == 201:
         tmp = {'id': r['id'], 'subnet': r['data'], 'description': description}
         output['data'].append(tmp)
@@ -152,29 +153,48 @@ def createSsVpc(region):
         privateb_res2 = json.loads(createFirstAddress(privateb['id'], 'Reserved by AWS'))
         privateb_res3 = json.loads(createFirstAddress(privateb['id'], 'Reserved by AWS'))
 
-        publica = json.loads(requestSubnet(r['id'], 23, description + ' Public subnet AZ A', regionalInternalDNS[region]))
-        tmp = {'id': publica['id'], 'subnet': publica['data'], 'description': description}
+        transitb = json.loads(requestSubnet(r['id'], 28, description + ' Transit subnet AZ B', 0, 0, 'last'))
+        tmp = {'id': transitb['id'], 'subnet': transitb['data'], 'description': description}
         output['data'].append(tmp)
-        publica_gw = json.loads(createFirstAddress(publica['id'], 'Default gateway', 1))
-        publica_dns = json.loads(createFirstAddress(publica['id'], 'Reserved by AWS'))
-        publica_res3 = json.loads(createFirstAddress(publica['id'], 'Reserved by AWS'))
+        transitb_gw = json.loads(createFirstAddress(transitb['id'], 'Default gateway', 1))
+        transitb_res2 = json.loads(createFirstAddress(transitb['id'], 'Reserved by AWS'))
+        transitb_res3 = json.loads(createFirstAddress(transitb['id'], 'Reserved by AWS'))
 
-        publicb = json.loads(requestSubnet(r['id'], 23, description + ' Public subnet AZ B', regionalInternalDNS[region]))
+        transita = json.loads(requestSubnet(r['id'], 28, description + ' Transit subnet AZ A', 0, 0, 'last'))
+        tmp = {'id': transita['id'], 'subnet': transita['data'], 'description': description}
+        output['data'].append(tmp)
+        transita_gw = json.loads(createFirstAddress(transita['id'], 'Default gateway', 1))
+        transita_res2 = json.loads(createFirstAddress(transita['id'], 'Reserved by AWS'))
+        transita_res3 = json.loads(createFirstAddress(transita['id'], 'Reserved by AWS'))
+
+        if cvpn:
+            cvpnb = json.loads(requestSubnet(r['id'], 28, description + ' Public CVPN subnet AZ B', regionalInternalDNS[region], 0, 'last'))
+            tmp = {'id': cvpnb['id'], 'subnet': cvpnb['data'], 'description': description}
+            output['data'].append(tmp)
+            cvpnb_gw = json.loads(createFirstAddress(cvpnb['id'], 'Default gateway', 1))
+            cvpnb_res2 = json.loads(createFirstAddress(cvpnb['id'], 'Reserved by AWS'))
+            cvpnb_res3 = json.loads(createFirstAddress(cvpnb['id'], 'Reserved by AWS'))
+    
+            cvpna = json.loads(requestSubnet(r['id'], 28, description + ' Public CVPN subnet AZ A', regionalInternalDNS[region], 0 , 'last'))
+            tmp = {'id': cvpna['id'], 'subnet': cvpna['data'], 'description': description}
+            output['data'].append(tmp)
+            cvpna_gw = json.loads(createFirstAddress(cvpna['id'], 'Default gateway', 1))
+            cvpna_res2 = json.loads(createFirstAddress(cvpna['id'], 'Reserved by AWS'))
+            cvpna_res3 = json.loads(createFirstAddress(cvpna['id'], 'Reserved by AWS'))
+
+        publicb = json.loads(requestSubnet(r['id'], 23, description + ' Public subnet AZ B', regionalInternalDNS[region], 1, 'last'))
         tmp = {'id': publicb['id'], 'subnet': publicb['data'], 'description': description}
         output['data'].append(tmp)
         publicb_gw = json.loads(createFirstAddress(publicb['id'], 'Default gateway', 1))
         publicb_res2 = json.loads(createFirstAddress(publicb['id'], 'Reserved by AWS'))
         publicb_res3 = json.loads(createFirstAddress(publicb['id'], 'Reserved by AWS'))
 
-        transitb = json.loads(requestSubnet(r['id'], 28, description + ' Transit subnet AZ B', 0, 0, 'last'))
-        tmp = {'id': transitb['id'], 'subnet': transitb['data'], 'description': description}
+        publica = json.loads(requestSubnet(r['id'], 23, description + ' Public subnet AZ A', regionalInternalDNS[region], 1 , 'last'))
+        tmp = {'id': publica['id'], 'subnet': publica['data'], 'description': description}
         output['data'].append(tmp)
-        transitb_gw = json.loads(createFirstAddress(transitb['id'], 'Default gateway', 1))
-
-        transita = json.loads(requestSubnet(r['id'], 28, description + ' Transit subnet AZ A', 0, 0, 'last'))
-        tmp = {'id': transita['id'], 'subnet': transita['data'], 'description': description}
-        output['data'].append(tmp)
-        transita_gw = json.loads(createFirstAddress(transita['id'], 'Default gateway', 1))
+        publica_gw = json.loads(createFirstAddress(publica['id'], 'Default gateway', 1))
+        publica_res2 = json.loads(createFirstAddress(publica['id'], 'Reserved by AWS'))
+        publica_res3 = json.loads(createFirstAddress(publica['id'], 'Reserved by AWS'))
 
         output['code'] = 200
         output['success'] = 'true'
@@ -196,8 +216,8 @@ def createvEdgeVpc(region):
     output = {'code': 0, 'success': 'false'}
     output['data'] = []
 
-    description = 'vEdge VpcCidr'
-    r = json.loads(requestSubnet(regionalNetworks[region], 25, description, regionalInternalDNS[region], 1, 'last'))
+    description = 'vEdge'
+    r = json.loads(requestSubnet(regionalNetworks[region], 25, description + ' VpcCidr', regionalInternalDNS[region], 1, 'last'))
     if r['code'] == 201:
         tmp = {'id': r['id'], 'subnet': r['data'], 'description': description}
         output['data'].append(tmp)
@@ -272,15 +292,20 @@ def main():
 
     # Read input arguments
     argp = argparse.ArgumentParser(description = 'Create Landing Zone networks.')
-    argp.add_argument('region', type=str, nargs=1, help='AWS region where the networks reside.')
+    argp.add_argument('region', type=str, help='AWS region where the networks reside.')
+    argp.add_argument('--cvpn', type=str, default='no', help='Whether to provision networks for CVPN in.')
     args = argp.parse_args()
-    region = args.region[0]
+    region = args.region
+    if args.cvpn == 'yes':
+        cvpn = True
+    else:
+        cvpn = False
 
     output = {'code': 0, 'success': 'false'}
     output['data'] = {}
 
     if region in regionalNetworks:
-        ssvpc = createSsVpc(region)
+        ssvpc = createSsVpc(region, cvpn)
         if ssvpc['code'] == 200:
             output['code'] = 200
             output['success'] = 'true'

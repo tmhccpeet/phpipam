@@ -48,6 +48,12 @@ regionalInternalDNS = {
         "eu-west-1": 3,
         "ap-southeast-2": 2
 }
+regionalTGWs = {
+        "us-east-1": "tgw-0031a74e3b340a704",
+        "eu-west-2": "tgw-000816d04ea49d358",
+        "eu-west-1": "tgw-0097de3283b71ced1",
+        "ap-southeast-2": "tgw-0fc230fd5535b3ddf"
+}
 
 def loadConfig():
     '''
@@ -317,7 +323,7 @@ def createCfYaml(region, ipam, template, cvpn = False):
     :rtype: str
     '''
 
-    global config, regionalInternalDNS
+    global config, regionalInternalDNS, regionalTGWs
 
     url = f"https://{config['server']}/api/{config['appid']}/tools/nameservers/{regionalInternalDNS[region]}/"
     headers = {
@@ -362,7 +368,8 @@ def createCfYaml(region, ipam, template, cvpn = False):
         'veTransitBIp': ipam[1][7]['subnet'],
         'veTransitBDescription': ipam[1][7]['description'],
         'veTransitAIp': ipam[1][8]['subnet'],
-        'veTransitADescription': ipam[1][8]['description']
+        'veTransitADescription': ipam[1][8]['description'],
+        'TransitGatewayId': regionalTGWs[region] 
     }
     if cvpn:
         tplArgs['ssCvpnBIp'] = ipam[0][7]['subnet']

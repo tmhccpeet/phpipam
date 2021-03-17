@@ -108,6 +108,31 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable2
       SubnetId: !Ref TransitSubnet2
 
+  TransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+        - !Ref TransitSubnet1
+        - !Ref TransitSubnet2
+      TransitGatewayId: {{ transitGatewayId }}
+      VpcId: !Ref VPC
+
+  Private1DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref PrivateRouteTable1 
+      TransitGatewayId: {{ transitGatewayId }}
+
+  Private2DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: TransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref PrivateRouteTable2 
+      TransitGatewayId: {{ transitGatewayId }}
+
 Outputs:
   VPC:
     Description: AWS ID of the created VPC
@@ -148,4 +173,8 @@ Outputs:
   TransitSubnet2Ip:
     Description: Subnet of the transit subnet in the 2nd Availability Zone
     Value: {{ transitBIp }}
+
+  TransitGatewayAttachment:
+    Description: AWS ID of the Transit Gateway Attachment
+    Value: !Ref TransitGatewayAttachment
 

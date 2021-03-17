@@ -252,6 +252,31 @@ Resources:
       SubnetId: !Ref SsCvpnBSubnet
   {%- endif %}
 
+  SsTransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+        - !Ref SsTransitASubnet
+        - !Ref SsTransitBSubnet
+      TransitGatewayId: {{ TransitGatewayId }}
+      VpcId: !Ref SsVPC
+
+  SsPrivateADefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: SsTransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref SsPrivateARouteTable
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  SsPrivateBDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: SsTransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref SsPrivateBRouteTable
+      TransitGatewayId: {{ TransitGatewayId }}
+
   #
   # vEdge VPC
   VeVPC:
@@ -417,6 +442,31 @@ Resources:
       RouteTableId: !Ref VePublicRouteTable
       SubnetId: !Ref VePublicBSubnet
 
+  VeTransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+        - !Ref VeTransitASubnet
+        - !Ref VeTransitBSubnet
+      TransitGatewayId: {{ TransitGatewayId }}
+      VpcId: !Ref VeVPC
+
+  VePrivateADefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VeTransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref VePrivateARouteTable
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  VePrivateBDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VeTransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref VePrivateBRouteTable
+      TransitGatewayId: {{ TransitGatewayId }}
+
 Outputs:
   SsVPC:
     Description: A reference to the created Shared Services VPC
@@ -492,6 +542,10 @@ Outputs:
     Value: {{ ssCvpnBIp }}
   {%- endif %}
 
+  SsTransitGatewayAttachment:
+    Description: AWS ID of the Shared Services Transit Gateway Attachment
+    Value: !Ref SsTransitGatewayAttachment
+
   VeVPC:
     Description: A reference to the created vEdge VPC
     Value: !Ref VeVPC
@@ -547,4 +601,8 @@ Outputs:
   VePublicBSubnetIP:
     Description: Subnet of the public subnet in the 2nd Availability Zone
     Value: {{ vePublicBIp }}
+
+  VeTransitGatewayAttachment:
+    Description: AWS ID of the vEdge Transit Gateway Attachment
+    Value: !Ref VeTransitGatewayAttachment
 

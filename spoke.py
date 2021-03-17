@@ -44,6 +44,12 @@ regionalInternalDNS = {
         "eu-west-1": 3,
         "ap-southeast-2": 2
 }
+regionalTGWs = {
+        "us-east-1": "tgw-0031a74e3b340a704",
+        "eu-west-2": "tgw-000816d04ea49d358",
+        "eu-west-1": "tgw-0097de3283b71ced1",
+        "ap-southeast-2": "tgw-0fc230fd5535b3ddf"
+}
 SPOKESIZE = 22 # Supernet size for a standard spoke
 
 def loadConfig():
@@ -187,7 +193,7 @@ def createCfYaml(region, account, ipam, template):
     :rtype: str
     '''
 
-    global config, regionalInternalDNS
+    global config, regionalInternalDNS, regionalTGWs
 
     url = f"https://{config['server']}/api/{config['appid']}/tools/nameservers/{regionalInternalDNS[region]}/"
     headers = {
@@ -210,7 +216,8 @@ def createCfYaml(region, account, ipam, template):
         transitBIp = ipam['data'][3]['subnet'],
         transitBDescription = ipam['data'][3]['description'],
         transitAIp = ipam['data'][4]['subnet'],
-        transitADescription = ipam['data'][4]['description']
+        transitADescription = ipam['data'][4]['description'],
+        transitGatewayId = regionalTGWs[region] 
     )
 
 def main():

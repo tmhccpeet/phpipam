@@ -158,12 +158,16 @@ def createSpoke(region, account, size = 22):
         tmp = {'id': transitb['id'], 'subnet': transitb['data'], 'description': description}
         output['data'].append(tmp)
         transitb_gw = json.loads(createFirstAddress(transitb['id'], 'Default gateway', 1))
+        transitb_res2 = json.loads(createFirstAddress(transitb['id'], 'Reserved by AWS'))
+        transitb_res3 = json.loads(createFirstAddress(transitb['id'], 'Reserved by AWS'))
 
         description = account + ' Transit subnet AZ A'
         transita = json.loads(requestSubnet(r['id'], 28, description, 0, 0, 'last'))
         tmp = {'id': transita['id'], 'subnet': transita['data'], 'description': description}
         output['data'].append(tmp)
         transita_gw = json.loads(createFirstAddress(transita['id'], 'Default gateway', 1))
+        transita_res2 = json.loads(createFirstAddress(transita['id'], 'Reserved by AWS'))
+        transita_res3 = json.loads(createFirstAddress(transita['id'], 'Reserved by AWS'))
         output['code'] = 200
         output['success'] = 'true'
     else:

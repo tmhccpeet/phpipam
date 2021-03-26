@@ -1,0 +1,852 @@
+Description:  This template deploys a TMHCC Regional Landing Zone version 2.
+  This Landing Zone consists of a Shared Services VPC, a vEdge VPC, a Firewall
+  VPC and all the interconnects required
+
+Resources:
+  DHCPOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Shared Services
+      DomainName: hcch.com
+      DomainNameServers:
+        {%- for nameserver in nameservers %}
+        - {{nameserver}}
+        {%- endfor %}
+
+  #Rfc1918PrefixList:
+
+  #
+  # Shared Services VPC
+  SsVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: {{ ssVpcCidr }}
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: Shared Services VPC
+
+  SsVPCDHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref SsVPC
+      DhcpOptionsId: !Ref DHCPOptions
+
+  SsSGAnyAny:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Permit all traffic
+      GroupDescription: Permit all network access
+      GroupName: PermitAnyAny-SG
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+        - CidrIpv6: ::/0
+          IpProtocol: -1
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+        - CidrIpv6: ::/0
+          IpProtocol: -1
+      VpcId: !Ref SsVPC
+
+  SsPrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SsVPC
+      Tags:
+        - Key: Name
+          Value: Shared Services Private Routes AZ A
+
+  SsPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SsVPC
+      Tags:
+        - Key: Name
+          Value: Shared Services Private Routes AZ B
+
+  SsPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SsVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ ssPrivateIp1 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ ssPrivateDescription1 }}
+
+  SsPrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SsPrivateRouteTable1
+      SubnetId: !Ref SsPrivateSubnet1
+
+  SsPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SsVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ ssPrivateIp2 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ ssPrivateDescription2 }}
+
+  SsPrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SsPrivateRouteTable2
+      SubnetId: !Ref SsPrivateSubnet2
+
+  SsTransitSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SsVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ ssTransitIp1 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ ssTransitDescription1 }}
+
+  SsTransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+        - !Ref SsTransitSubnet1
+        - !Ref SsTransitSubnet2
+      TransitGatewayId: {{ TransitGatewayId }}
+      VpcId: !Ref SsVPC
+      Tags:
+        - Key: Name
+          Value: Shared Services VPC Attachment
+
+  SsTransitSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SsPrivateRouteTable1
+      SubnetId: !Ref SsTransitSubnet1
+
+  SsTransitSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SsVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ ssTransitIp2 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ ssTransitDescription2 }}
+
+  SsTransitSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SsPrivateRouteTable2
+      SubnetId: !Ref SsTransitSubnet2
+
+  SsPublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SsVPC
+      Tags:
+        - Key: Name
+          Value: Shared Services Public Routes
+
+  SsInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Shared Services Internet Gateway
+
+  SsInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref SsInternetGateway
+      VpcId: !Ref SsVPC
+
+  SsDefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: SsInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref SsPublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref SsInternetGateway
+
+  SsPublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SsVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ ssPublicIp1 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ ssPublicDescription1 }}
+
+  SsPublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SsPublicRouteTable
+      SubnetId: !Ref SsPublicSubnet1
+
+  SsNatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: SsInternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: {{ ssNatGateway1EIPName }}
+
+  SsNatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt SsNatGateway1EIP.AllocationId
+      SubnetId: !Ref SsPublicSubnet1
+      Tags:
+        - Key: Name
+          Value: {{ ssNatGateway1Name }}
+
+  SsPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SsVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ ssPublicIp2 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ ssPublicDescription2 }}
+
+  SsPublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SsPublicRouteTable
+      SubnetId: !Ref SsPublicSubnet2
+
+  SsNatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: SsInternetGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: {{ ssNatGateway2EIPName }}
+
+  SsNatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt SsNatGateway2EIP.AllocationId
+      SubnetId: !Ref SsPublicSubnet2
+      Tags:
+        - Key: Name
+          Value: {{ ssNatGateway2Name }}
+
+  {%- if cvpn is sameas true %}
+  SsCvpnASubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SsVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ ssCvpnAIp }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ ssCvpnADescription }}
+
+  SsCvpnBSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SsVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ ssCvpnBIp }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ ssCvpnBDescription }}
+
+  SsCvpnASubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SsPublicRouteTable
+      SubnetId: !Ref SsCvpnASubnet
+
+  SsCvpnBSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SsPublicRouteTable
+      SubnetId: !Ref SsCvpnBSubnet
+  {%- endif %}
+
+  SsPrivateDefaultRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: SsTransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref SsPrivateRouteTable1
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  SsPrivateDefaultRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: SsTransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref SsPrivateRouteTable2
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  #
+  # vEdge VPC
+  VeVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: {{ veVpcCidr }}
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: vEdge VPC
+
+  VeVPCDHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties:
+      VpcId: !Ref VeVPC
+      DhcpOptionsId: !Ref DHCPOptions
+
+  VeSGAnyAny:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Permit all traffic
+      GroupDescription: Permit all network access
+      GroupName: PermitAnyAny-SG
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+        - CidrIpv6: ::/0
+          IpProtocol: -1
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+        - CidrIpv6: ::/0
+          IpProtocol: -1
+      VpcId: !Ref VeVPC
+
+  VePrivateRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VeVPC
+      Tags:
+        - Key: Name
+          Value: vEdge Private Routes AZ A
+
+  VePrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VeVPC
+      Tags:
+        - Key: Name
+          Value: vEdge Private Routes AZ B
+
+  VePrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VeVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ vePrivateIp1 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ vePrivateDescription1 }}
+
+  VePrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VePrivateRouteTable1
+      SubnetId: !Ref VePrivateSubnet1
+
+  VePrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VeVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ vePrivateIp2 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ vePrivateDescription2 }}
+
+  VePrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VePrivateRouteTable2
+      SubnetId: !Ref VePrivateSubnet2
+
+  VeTransitSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VeVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ veTransitIp1 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ veTransitDescription1 }}
+
+  VeTransitSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VePrivateRouteTable1
+      SubnetId: !Ref VeTransitSubnet1
+
+  VeTransitSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VeVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ veTransitIp2 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ veTransitDescription2 }}
+
+  VeTransitSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VePrivateRouteTable2
+      SubnetId: !Ref VeTransitSubnet2
+
+  VePublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VeVPC
+      Tags:
+        - Key: Name
+          Value: vEdge Public Routes
+
+  VeInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: vEdge Internet Gateway
+
+  VeInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref VeInternetGateway
+      VpcId: !Ref VeVPC
+
+  VeDefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VeInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref VePublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref VeInternetGateway
+
+  VePublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VeVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: {{ vePublicIp1 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ vePublicDescription1 }}
+
+  VePublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VePublicRouteTable
+      SubnetId: !Ref VePublicSubnet1
+
+  VePublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VeVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: {{ vePublicIp2 }}
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: {{ vePublicDescription2 }}
+
+  VePublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref VePublicRouteTable
+      SubnetId: !Ref VePublicSubnet2
+
+  VeTransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+        - !Ref VeTransitSubnet1
+        - !Ref VeTransitSubnet2
+      TransitGatewayId: {{ TransitGatewayId }}
+      VpcId: !Ref VeVPC
+      Tags:
+        - Key: Name
+          Value: vEdge VPC Attachment
+
+  VeTgRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: AWS Firewall Route Table
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  VeTgRouteTableDefaultRoute:
+    Type: AWS::EC2::TransitGatewayRoute
+    Properties:
+      Blackhole: No
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayAttachmentId: !Ref SsTransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref VeTgRouteTable
+
+  VeTransitGatewayRouteTableAssociation:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties:
+      TransitGatewayAttachmentId: !Ref VeTransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref VeTgRouteTable
+
+  VePrivateDefaultRoute1:
+    Type: AWS::EC2::Route
+    DependsOn: VeTransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref VePrivateRouteTable1
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  VePrivateDefaultRoute2:
+    Type: AWS::EC2::Route
+    DependsOn: VeTransitGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      RouteTableId: !Ref VePrivateRouteTable2
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  VeTgRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: vEdge Route Table
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  VeTgRouteTableDefaultRoute:
+    Type: AWS::EC2::TransitGatewayRoute
+    Properties:
+      Blackhole: No
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayAttachmentId: !Ref SsTransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref VeTgRouteTable
+
+  #
+  # AWS Firewall VPC
+  FwVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 100.64.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: AWS Firewall VPC
+
+  FwInspectionRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref FwVPC
+      Tags:
+        - Key: Name
+          Value: AWS Firewall Inspection Routes AZ A
+
+  FwInspectionRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref FwVPC
+      Tags:
+        - Key: Name
+          Value: AWS Firewall Inspection Routes AZ B
+
+  FwTransitSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref FwVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: 100.64.0.0/28
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Transit Subnet AZ A
+
+  FwTransitSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FwInspectionRouteTable1
+      SubnetId: !Ref FwTransitSubnet1
+
+  FwTransitSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref FwVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: 100.64.0.16/28
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Transit Subnet AZ B
+
+  FwTransitSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FwInspectionRouteTable2
+      SubnetId: !Ref FwTransitSubnet2
+
+  FwTransitGatewayAttachment:
+    Type: AWS::EC2::TransitGatewayAttachment
+    Properties:
+      SubnetIds:
+        - !Ref FwTransitSubnet1
+        - !Ref FwTransitSubnet2
+      TransitGatewayId: {{ TransitGatewayId }}
+      VpcId: !Ref FwVPC
+      Tags:
+        - Key: Name
+          Value: Inspection VPC Attachment
+
+  FwFirewallRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref FwVPC
+      Tags:
+        - Key: Name
+          Value: AWS Firewall Routes
+
+  FwDefaultFirewallRoute:
+    Type: AWS::EC2::Route
+    DependsOn: FwTransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref FwFirewallRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  FwFirewallSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref FwVPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: 100.64.1.0/28
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Firewall Subnet AZ A
+
+  FwFirewallSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FwFirewallRouteTable
+      SubnetId: !Ref FwFirewallSubnet1
+
+  FwFirewallSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref FwVPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: 100.64.1.16/28
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: Firewall Subnet AZ B
+
+  FwFirewallSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref FwFirewallRouteTable
+      SubnetId: !Ref FwFirewallSubnet2
+
+  FwTgRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: AWS Firewall Route Table
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  FwTgRouteTableDefaultRoute:
+    Type: AWS::EC2::TransitGatewayRoute
+    Properties:
+      Blackhole: No
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayAttachmentId: !Ref VeTransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref FwTgRouteTable
+
+  FwTransitGatewayRouteTableAssociation:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties:
+      TransitGatewayAttachmentId: !Ref FwTransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref FwTgRouteTable
+
+Outputs:
+  SsVPC:
+    Description: A reference to the created Shared Services VPC
+    Value: !Ref SsVPC
+
+  SsVpcCidr:
+    Description: The CIDR of the Shared Services VPC
+    Value: {{ ssVpcCidr }}
+
+  SsPrivateSubnet1:
+    Description: AWS ID of the private subnet in the 1st Availability Zone
+    Value: !Ref SsPrivateSubnet1
+
+  SsPrivateSubnetIP1:
+    Description: Subnet of the private subnet in the 1st Availability Zone
+    Value: {{ ssPrivateIp1 }}
+
+  SsPrivateSubnet2:
+    Description: AWS ID of the private subnet in the 2nd Availability Zone
+    Value: !Ref SsPrivateSubnet2
+
+  SsPrivateSubnetIP2:
+    Description: Subnet of the private subnet in the 2nd Availability Zone
+    Value: {{ ssPrivateIp2 }}
+
+  SsTransitSubnet1:
+    Description: AWS ID of the transit subnet in the 1st Availability Zone
+    Value: !Ref SsTransitSubnet1
+
+  SsTransitSubnetIp1:
+    Description: Subnet of the transit subnet in the 1st Availability Zone
+    Value: {{ ssTransitIp1 }}
+
+  SsTransitSubnet2:
+    Description: AWS ID of the transit subnet in the 2nd Availability Zone
+    Value: !Ref SsTransitSubnet2
+
+  SsTransitSubnetIp2:
+    Description: Subnet of the transit subnet in the 2nd Availability Zone
+    Value: {{ ssTransitIp2 }}
+
+  SsPublicSubnet1:
+    Description: AWS ID of the public subnet in the 1st Availability Zone
+    Value: !Ref SsPublicSubnet1
+
+  SsPublicSubnetIP1:
+    Description: Subnet of the public subnet in the 1st Availability Zone
+    Value: {{ ssPublicIp1 }}
+
+  SsPublicSubnet2:
+    Description: AWS ID of the public subnet in the 2nd Availability Zone
+    Value: !Ref SsPublicSubnet2
+
+  SsPublicSubnetIP2:
+    Description: Subnet of the public subnet in the 2nd Availability Zone
+    Value: {{ ssPublicIp2 }}
+
+  {%- if cvpn is sameas true %}
+  SsCvpnASubnet:
+    Description: AWS ID of the cvpn subnet in the 1st Availability Zone
+    Value: !Ref SsCvpnASubnet
+
+  SsCvpnASubnetIP:
+    Description: Subnet of the cvpn subnet in the 1st Availability Zone
+    Value: {{ ssCvpnAIp }}
+
+  SsCvpnBSubnet:
+    Description: AWS ID of the cvpn subnet in the 2nd Availability Zone
+    Value: !Ref SsCvpnBSubnet
+
+  SsCvpnBSubnetIP:
+    Description: Subnet of the cvpn subnet in the 2nd Availability Zone
+    Value: {{ ssCvpnBIp }}
+  {%- endif %}
+
+  SsTransitGatewayAttachment:
+    Description: AWS ID of the Shared Services Transit Gateway Attachment
+    Value: !Ref SsTransitGatewayAttachment
+
+  #
+  # vEdge
+  VeVPC:
+    Description: A reference to the created vEdge VPC
+    Value: !Ref VeVPC
+
+  VeVpcCidr:
+    Description: The CIDR of the vEdge VPC
+    Value: {{ veVpcCidr }}
+
+  VePrivateSubnet1:
+    Description: AWS ID of the private subnet in the 1st Availability Zone
+    Value: !Ref VePrivateSubnet1
+
+  VePrivateSubnetIP1:
+    Description: Subnet of the private subnet in the 1st Availability Zone
+    Value: {{ vePrivateIp1 }}
+
+  VePrivateSubnet2:
+    Description: AWS ID of the private subnet in the 2nd Availability Zone
+    Value: !Ref VePrivateSubnet2
+
+  VePrivateSubnetIP2:
+    Description: Subnet of the private subnet in the 2nd Availability Zone
+    Value: {{ vePrivateIp2 }}
+
+  VeTransitSubnet1:
+    Description: AWS ID of the transit subnet in the 1st Availability Zone
+    Value: !Ref VeTransitSubnet1
+
+  VeTransitSubnetIp1:
+    Description: Subnet of the transit subnet in the 1st Availability Zone
+    Value: {{ veTransitIp1 }}
+
+  VeTransitSubnet2:
+    Description: AWS ID of the transit subnet in the 2nd Availability Zone
+    Value: !Ref VeTransitSubnet2
+
+  VeTransitSubnetIp2:
+    Description: Subnet of the transit subnet in the 2nd Availability Zone
+    Value: {{ veTransitIp2 }}
+
+  VePublicSubnet1:
+    Description: AWS ID of the public subnet in the 1st Availability Zone
+    Value: !Ref VePublicSubnet1
+
+  VePublicSubnetIP1:
+    Description: Subnet of the public subnet in the 1st Availability Zone
+    Value: {{ vePublicIp1 }}
+
+  VePublicSubnet2:
+    Description: AWS ID of the public subnet in the 2nd Availability Zone
+    Value: !Ref VePublicSubnet2
+
+  VePublicSubnetIP2:
+    Description: Subnet of the public subnet in the 2nd Availability Zone
+    Value: {{ vePublicIp2 }}
+
+  VeTransitGatewayAttachment:
+    Description: AWS ID of the vEdge Transit Gateway Attachment
+    Value: !Ref VeTransitGatewayAttachment
+
+  #
+  # AWS Firewall
+  FwVPC:
+    Description: A reference to the created AWS Firewall VPC
+    Value: !Ref FwVPC
+
+  FwTransitGatewayAttachment:
+    Description: AWS ID of the AWS Firewall Transit Gateway Attachment
+    Value: !Ref FwTransitGatewayAttachment
+

@@ -1,6 +1,6 @@
-Description:  This template deploys a TMHCC Regional Landing Zone version 2.
-  This Landing Zone consists of a Shared Services VPC, a vEdge VPC, a Firewall
-  VPC and all the interconnects required
+Description:  This template deploys a TMHCC Regional Hub network version 2.
+  This Hub network consists of a Shared Services VPC, a vEdge VPC, a Firewall
+  VPC and all the interconnects required.
 
 Resources:
   DHCPOptions:
@@ -8,14 +8,26 @@ Resources:
     Properties:
       Tags:
         - Key: Name
-          Value: Shared Services
+          Value: Regional DHCP Options
       DomainName: hcch.com
       DomainNameServers:
         {%- for nameserver in nameservers %}
         - {{nameserver}}
         {%- endfor %}
 
-  #Rfc1918PrefixList:
+  Rfc1918PrefixList:
+    Type: AWS::EC2::PrefixList
+    Properties:
+      PrefixListName: RFC1918-PrefixList
+      AddressFamily: IPv4
+      MaxEntries: 3
+      Entries:
+        - Cidr: 10.0.0.0/8
+          Description: 10.0.0.0/8 Private Prefix
+        - Cidr: 172.16.0.0/12
+          Description: 172.16.0.0/12 Private Prefix
+        - Cidr: 192.168.0.0/16
+          Description: 192.168.0.0/16 Private Prefix
 
   #
   # Shared Services VPC
@@ -180,6 +192,30 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref SsInternetGateway
 
+  Ss10Slash8PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: SsTransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref SsPublicRouteTable
+      DestinationCidrBlock: 10.0.0.0/8
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  Ss17216Slash12PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: SsTransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref SsPublicRouteTable
+      DestinationCidrBlock: 172.16.0.0/12
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  Ss192168Slash16PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: SsTransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref SsPublicRouteTable
+      DestinationCidrBlock: 192.168.0.0/16
+      TransitGatewayId: {{ TransitGatewayId }}
+
   SsPublicSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -302,6 +338,42 @@ Resources:
       RouteTableId: !Ref SsPrivateRouteTable2
       TransitGatewayId: {{ TransitGatewayId }}
 
+  SsTgRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Shared Services Route Table
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  SsTgRouteTableDefaultRoute:
+    Type: AWS::EC2::TransitGatewayRoute
+    DependsOn: 
+      - SsTransitGatewayAttachment
+      - FwTransitGatewayAttachment
+    Properties:
+      Blackhole: No
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayAttachmentId: !Ref FwTransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref SsTgRouteTable
+
+  SsTransitGatewayRouteTableAssociation:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    DependsOn: 
+      - SsTransitGatewayAttachment
+      - SsTgRouteTable
+    Properties:
+      TransitGatewayAttachmentId: !Ref SsTransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref SsTgRouteTable
+
+  SsTransitGatewayRouteTablePropagation:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    DependsOn: 
+      - SsTransitGatewayAttachment
+    Properties:
+      TransitGatewayAttachmentId: !Ref SsTransitGatewayAttachment
+      TransitGatewayRouteTableId: {{ TransitGatewayMainRouteTable }}
+
   #
   # vEdge VPC
   VeVPC:
@@ -340,21 +412,37 @@ Resources:
           IpProtocol: -1
       VpcId: !Ref VeVPC
 
-  VePrivateRouteTable1:
+  VeInboundRouteTable1:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VeVPC
       Tags:
         - Key: Name
-          Value: vEdge Private Routes AZ A
+          Value: vEdge In Routes AZ A
 
-  VePrivateRouteTable2:
+  VeInboundRouteTable2:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VeVPC
       Tags:
         - Key: Name
-          Value: vEdge Private Routes AZ B
+          Value: vEdge In Routes AZ B
+
+  VeOutboundRouteTable1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VeVPC
+      Tags:
+        - Key: Name
+          Value: vEdge Out Routes AZ A
+
+  VeOutboundRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VeVPC
+      Tags:
+        - Key: Name
+          Value: vEdge Out Routes AZ B
 
   VePrivateSubnet1:
     Type: AWS::EC2::Subnet
@@ -370,7 +458,7 @@ Resources:
   VePrivateSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref VePrivateRouteTable1
+      RouteTableId: !Ref VeOutboundRouteTable1
       SubnetId: !Ref VePrivateSubnet1
 
   VePrivateSubnet2:
@@ -387,7 +475,7 @@ Resources:
   VePrivateSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref VePrivateRouteTable2
+      RouteTableId: !Ref VeOutboundRouteTable2
       SubnetId: !Ref VePrivateSubnet2
 
   VeTransitSubnet1:
@@ -404,7 +492,7 @@ Resources:
   VeTransitSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref VePrivateRouteTable1
+      RouteTableId: !Ref VeInboundRouteTable1
       SubnetId: !Ref VeTransitSubnet1
 
   VeTransitSubnet2:
@@ -421,7 +509,7 @@ Resources:
   VeTransitSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref VePrivateRouteTable2
+      RouteTableId: !Ref VeInboundRouteTable2
       SubnetId: !Ref VeTransitSubnet2
 
   VePublicRouteTable:
@@ -499,42 +587,36 @@ Resources:
         - Key: Name
           Value: vEdge VPC Attachment
 
-  VeTgRouteTable:
-    Type: AWS::EC2::TransitGatewayRouteTable
-    Properties:
-      Tags:
-        - Key: Name
-          Value: AWS Firewall Route Table
-      TransitGatewayId: {{ TransitGatewayId }}
-
-  VeTgRouteTableDefaultRoute:
-    Type: AWS::EC2::TransitGatewayRoute
-    Properties:
-      Blackhole: No
-      DestinationCidrBlock: 0.0.0.0/0
-      TransitGatewayAttachmentId: !Ref SsTransitGatewayAttachment
-      TransitGatewayRouteTableId: !Ref VeTgRouteTable
-
-  VeTransitGatewayRouteTableAssociation:
-    Type: AWS::EC2::TransitGatewayRouteTableAssociation
-    Properties:
-      TransitGatewayAttachmentId: !Ref VeTransitGatewayAttachment
-      TransitGatewayRouteTableId: !Ref VeTgRouteTable
-
-  VePrivateDefaultRoute1:
+  VeInboundRouteTable1DefaultRoute:
     Type: AWS::EC2::Route
     DependsOn: VeTransitGatewayAttachment
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
-      RouteTableId: !Ref VePrivateRouteTable1
+      RouteTableId: !Ref VeInboundRouteTable1
       TransitGatewayId: {{ TransitGatewayId }}
 
-  VePrivateDefaultRoute2:
+  VeInboundRouteTable2DefaultRoute:
     Type: AWS::EC2::Route
     DependsOn: VeTransitGatewayAttachment
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
-      RouteTableId: !Ref VePrivateRouteTable2
+      RouteTableId: !Ref VeInboundRouteTable2
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  VeOutboundRouteTable1RegionalCidrRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VeTransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref VeOutboundRouteTable1
+      DestinationCidrBlock: {{ regionalCidr }}
+      TransitGatewayId: {{ TransitGatewayId }}
+
+  VeOutboundRouteTable2RegionalCidrRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VeTransitGatewayAttachment
+    Properties:
+      RouteTableId: !Ref VeOutboundRouteTable2
+      DestinationCidrBlock: {{ regionalCidr }}
       TransitGatewayId: {{ TransitGatewayId }}
 
   VeTgRouteTable:
@@ -547,14 +629,32 @@ Resources:
 
   VeTgRouteTableDefaultRoute:
     Type: AWS::EC2::TransitGatewayRoute
+    DependsOn: SsTransitGatewayAttachment
     Properties:
       Blackhole: No
       DestinationCidrBlock: 0.0.0.0/0
       TransitGatewayAttachmentId: !Ref SsTransitGatewayAttachment
       TransitGatewayRouteTableId: !Ref VeTgRouteTable
 
+  VeTransitGatewayRouteTableAssociation:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    DependsOn:
+      - VeTransitGatewayAttachment
+      - VeRouteTable
+    Properties:
+      TransitGatewayAttachmentId: !Ref VeTransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref VeTgRouteTable
+
+  VeTransitGatewayRouteTablePropagation:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    DependsOn:
+      - VeTransitGatewayAttachment
+    Properties:
+      TransitGatewayAttachmentId: !Ref VeTransitGatewayAttachment
+      TransitGatewayRouteTableId: {{ TransitGatewayMainRouteTable }}
+
   #
-  # AWS Firewall VPC
+  # Inspection VPC
   FwVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -563,7 +663,7 @@ Resources:
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: AWS Firewall VPC
+          Value: Inspection VPC
 
   FwInspectionRouteTable1:
     Type: AWS::EC2::RouteTable
@@ -571,7 +671,7 @@ Resources:
       VpcId: !Ref FwVPC
       Tags:
         - Key: Name
-          Value: AWS Firewall Inspection Routes AZ A
+          Value: Inspection Routes AZ A
 
   FwInspectionRouteTable2:
     Type: AWS::EC2::RouteTable
@@ -579,7 +679,7 @@ Resources:
       VpcId: !Ref FwVPC
       Tags:
         - Key: Name
-          Value: AWS Firewall Inspection Routes AZ B
+          Value: Inspection Routes AZ B
 
   FwTransitSubnet1:
     Type: AWS::EC2::Subnet
@@ -682,11 +782,12 @@ Resources:
     Properties:
       Tags:
         - Key: Name
-          Value: AWS Firewall Route Table
+          Value: Inspection Route Table
       TransitGatewayId: {{ TransitGatewayId }}
 
   FwTgRouteTableDefaultRoute:
     Type: AWS::EC2::TransitGatewayRoute
+    DependsOn: VeTransitGatewayAttachment
     Properties:
       Blackhole: No
       DestinationCidrBlock: 0.0.0.0/0
@@ -699,10 +800,26 @@ Resources:
       TransitGatewayAttachmentId: !Ref FwTransitGatewayAttachment
       TransitGatewayRouteTableId: !Ref FwTgRouteTable
 
+  FwTransitGatewayRouteTablePropagation:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    DependsOn: 
+      - FwTransitGatewayAttachment
+    Properties:
+      TransitGatewayAttachmentId: !Ref FwTransitGatewayAttachment
+      TransitGatewayRouteTableId: {{ TransitGatewayMainRouteTable }}
+
 Outputs:
+  DHCPOptions:
+    Description: Regional DHCP Options
+    Value: !Ref DHCPOptions
+    Export:
+      Name: DHCPOptions
+
   SsVPC:
     Description: A reference to the created Shared Services VPC
     Value: !Ref SsVPC
+    Export:
+      Name: SsVPC
 
   SsVpcCidr:
     Description: The CIDR of the Shared Services VPC
@@ -711,6 +828,8 @@ Outputs:
   SsPrivateSubnet1:
     Description: AWS ID of the private subnet in the 1st Availability Zone
     Value: !Ref SsPrivateSubnet1
+    Export:
+      Name: SsPrivateSubnet1
 
   SsPrivateSubnetIP1:
     Description: Subnet of the private subnet in the 1st Availability Zone
@@ -719,6 +838,8 @@ Outputs:
   SsPrivateSubnet2:
     Description: AWS ID of the private subnet in the 2nd Availability Zone
     Value: !Ref SsPrivateSubnet2
+    Export:
+      Name: SsPrivateSubnet2
 
   SsPrivateSubnetIP2:
     Description: Subnet of the private subnet in the 2nd Availability Zone
@@ -743,6 +864,8 @@ Outputs:
   SsPublicSubnet1:
     Description: AWS ID of the public subnet in the 1st Availability Zone
     Value: !Ref SsPublicSubnet1
+    Export:
+      Name: SsPublicSubnet1
 
   SsPublicSubnetIP1:
     Description: Subnet of the public subnet in the 1st Availability Zone
@@ -751,6 +874,8 @@ Outputs:
   SsPublicSubnet2:
     Description: AWS ID of the public subnet in the 2nd Availability Zone
     Value: !Ref SsPublicSubnet2
+    Export:
+      Name: SsPublicSubnet2
 
   SsPublicSubnetIP2:
     Description: Subnet of the public subnet in the 2nd Availability Zone
@@ -783,6 +908,8 @@ Outputs:
   VeVPC:
     Description: A reference to the created vEdge VPC
     Value: !Ref VeVPC
+    Export:
+      Name: VeVPC
 
   VeVpcCidr:
     Description: The CIDR of the vEdge VPC
@@ -791,6 +918,8 @@ Outputs:
   VePrivateSubnet1:
     Description: AWS ID of the private subnet in the 1st Availability Zone
     Value: !Ref VePrivateSubnet1
+    Export:
+      Name: vEdgePrivateSubnet1
 
   VePrivateSubnetIP1:
     Description: Subnet of the private subnet in the 1st Availability Zone
@@ -799,6 +928,8 @@ Outputs:
   VePrivateSubnet2:
     Description: AWS ID of the private subnet in the 2nd Availability Zone
     Value: !Ref VePrivateSubnet2
+    Export:
+      Name: vEdgePrivateSubnet2
 
   VePrivateSubnetIP2:
     Description: Subnet of the private subnet in the 2nd Availability Zone
@@ -840,13 +971,27 @@ Outputs:
     Description: AWS ID of the vEdge Transit Gateway Attachment
     Value: !Ref VeTransitGatewayAttachment
 
+  VeApplianceModeCommand:
+    Description: Command to enable 'appliance mode' for vEdge VPC
+    Value: !Sub
+      - aws ec2 modify-transit-gateway-vpc-attachment --transit-gateway-attachment-id ${attachmentId} --options ApplianceModeSupport=enable
+      - { attachmentId: !Ref VeTransitGatewayAttachment }
+
   #
   # AWS Firewall
   FwVPC:
-    Description: A reference to the created AWS Firewall VPC
+    Description: A reference to the created Inspection VPC
     Value: !Ref FwVPC
 
   FwTransitGatewayAttachment:
     Description: AWS ID of the AWS Firewall Transit Gateway Attachment
     Value: !Ref FwTransitGatewayAttachment
+    Export:
+      Name: FwTransitGatewayAttachment
+
+  FwApplianceModeCommand:
+    Description: Command to enable 'appliance mode' for Inspection VPC
+    Value: !Sub
+      - aws ec2 modify-transit-gateway-vpc-attachment --transit-gateway-attachment-id ${attachmentId} --options ApplianceModeSupport=enable
+      - { attachmentId: !Ref FwTransitGatewayAttachment }
 

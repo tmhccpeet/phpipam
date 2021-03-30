@@ -1,5 +1,7 @@
-Description:  This stack deploys a TMHCC Standard Spoke VPC for {{ account }},
-  with a pair of transit and private subnets spread across two Availability Zones.
+Description:  This stack deploys a TMHCC Standard Spoke VPC version 2.
+  This stack is for for {{ account }}, and includes a pair of transit and
+  private subnets spread across two Availability Zones, plus a route table
+  in the regional Transit Gateway.
 
 Resources:
   VPC:
@@ -12,17 +14,11 @@ Resources:
         - Key: Name
           Value: {{ account }}
 
-  DHCPOptions:
-    Type: AWS::EC2::DHCPOptions
+  VPCDHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
     Properties:
-      Tags:
-        - Key: Name
-          Value: {{ account }}
-      DomainName: hcch.com
-      DomainNameServers:
-        {%- for nameserver in nameservers %}
-        - {{nameserver}}
-        {%- endfor %}
+      VpcId: !Ref VPC
+      DhcpOptionsId: {{ dhcpOptionsId }}
 
   SGAnyAny:
     Type: AWS::EC2::SecurityGroup
@@ -136,6 +132,9 @@ Resources:
         - !Ref TransitSubnet2
       TransitGatewayId: {{ transitGatewayId }}
       VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: {{ account }} VPC Attachment
 
   Private1DefaultRoute:
     Type: AWS::EC2::Route
@@ -153,22 +152,58 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable2 
       TransitGatewayId: {{ transitGatewayId }}
 
+  TransitGatewayRouteTable:
+    Type: AWS::EC2::TransitGatewayRouteTable
+    Properties:
+      Tags:
+        - Key: Name
+          Value: {{ account }} Route Table
+      TransitGatewayId: {{ transitGatewayId }}
+
+  TransitGatewayRouteTableDefaultRoute:
+    Type: AWS::EC2::TransitGatewayRoute
+    Properties:
+      Blackhole: No
+      DestinationCidrBlock: 0.0.0.0/0
+      TransitGatewayAttachmentId: {{ transitGatewayInspectionAttachment }}
+      TransitGatewayRouteTableId: !Ref TransitGatewayRouteTable
+
+  TransitGatewayRouteTableAssociation:
+    Type: AWS::EC2::TransitGatewayRouteTableAssociation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
+      TransitGatewayRouteTableId: !Ref TransitGatewayRouteTable
+
+  FwTransitGatewayRouteTablePropagation:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties:
+      TransitGatewayAttachmentId: {{ transitGatewayInspectionAttachment }}
+      TransitGatewayRouteTableId: {{ TransitGatewayMainRouteTable }}
+
 Outputs:
   VPC:
     Description: AWS ID of the created VPC
     Value: !Ref VPC
+    Export:
+      Name: VPC
 
   VpcCidr:
     Description: The CIDR of the VPC
     Value: {{ vpcCidr }}
+    Export:
+      Name: VpcCidr
 
   SGAnyAny:
     Description: AWS ID of the security group permitting all traffic in and out
     Value: !Ref SGAnyAny
+    Export:
+      Name: SGAnyAny
 
   PrivateSubnet1:
     Description: AWS ID of the private subnet in the 1st Availability Zone
     Value: !Ref PrivateSubnet1
+    Export:
+      Name: PrivateSubnet1
 
   PrivateSubnet1IP:
     Description: Subnet of the private subnet in the 1st Availability Zone
@@ -177,6 +212,8 @@ Outputs:
   PrivateSubnet2:
     Description: AWS ID of the private subnet in the 2nd Availability Zone
     Value: !Ref PrivateSubnet2
+    Export:
+      Name: PrivateSubnet2
 
   PrivateSubnet2IP:
     Description: Subnet of the private subnet in the 2nd Availability Zone

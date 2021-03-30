@@ -32,24 +32,49 @@ from jinja2 import Template
 
 starttime = time.time()
 config = {}
-regionalNetworks = {
-        "us-east-1": 74,
-        "eu-west-2": 75,
-        "eu-west-1": 76,
-        "ap-southeast-2": 106
+regionalSettings = {
+    "ap-southeast-2": {
+        "network": 106,
+        "dns": 2,
+        "tgwId": "tgw-0fc230fd5535b3ddf",
+        "tgwInspectionAttachment": "",
+        "tgwMainRouteTable": "",
+        "dhcpOptions": ""
+    },
+    "us-east-1": {
+        "network": 74,
+        "dns": 2,
+        "tgwId": "tgw-0031a74e3b340a704",
+        "tgwInspectionAttachment": "",
+        "tgwMainRouteTable": "",
+        "dhcpOptions": ""
+    },
+    "eu-west-1": {
+        "network": 76,
+        "dns": 3,
+        "tgwId": "tgw-0031a74e3b340a704",
+        "tgwInspectionAttachment": "",
+        "tgwMainRouteTable": "",
+        "dhcpOptions": ""
+    },
+    "eu-west-2": {
+        "network": 75,
+        "dns": 3,
+        "tgwId": "tgw-000816d04ea49d358",
+        "tgwInspectionAttachment": "",
+        "tgwMainRouteTable": "",
+        "dhcpOptions": ""
+    },
+    "eu-central-1": {
+        "network": 918,
+        "dns": 3,
+        "tgwId": "tgw-06173001949ff1ea2",
+        "tgwInspectionAttachment": "tgw-attach-068d1df133ade8cac",
+        "tgwMainRouteTable": "tgw-rtb-05f55e0d134692083",
+        "dhcpOptions": "dopt-0a11e07c9afdbb7d8"
+    }
 }
-regionalInternalDNS = {
-        "us-east-1": 2,
-        "eu-west-2": 3,
-        "eu-west-1": 3,
-        "ap-southeast-2": 2
-}
-regionalTGWs = {
-        "us-east-1": "tgw-0031a74e3b340a704",
-        "eu-west-2": "tgw-000816d04ea49d358",
-        "eu-west-1": "tgw-0097de3283b71ced1",
-        "ap-southeast-2": "tgw-0fc230fd5535b3ddf"
-}
+
 SPOKESIZE = 22 # Supernet size for a standard spoke
 
 def loadConfig():
@@ -133,18 +158,18 @@ def createSpoke(region, account, size = 22):
     :return: JSON object with server response
     :rtype: str
     '''
-    global config, regionalNetworks, regionalInternalDNS
+    global config, regionalSettings 
     output = {'code': 0, 'success': 'false'}
     output['data'] = []
 
     description = account + ' VpcCidr'
-    r = json.loads(requestSubnet(regionalNetworks[region], size, description, regionalInternalDNS[region]))
+    r = json.loads(requestSubnet(regionalSettings[region]['network'], size, description, regionalSettings[region]['dns']))
     if r['code'] == 201:
         tmp = {'id': r['id'], 'subnet': r['data'], 'description': description}
         output['data'].append(tmp)
 
         description = account + ' Private subnet AZ A'
-        privatea = json.loads(requestSubnet(r['id'], 24, description, regionalInternalDNS[region]))
+        privatea = json.loads(requestSubnet(r['id'], 24, description, regionalSettings[region]['dns']))
         tmp = {'id': privatea['id'], 'subnet': privatea['data'], 'description': description}
         output['data'].append(tmp)
         privatea_gw = json.loads(createFirstAddress(privatea['id'], 'Default gateway', 1))
@@ -152,7 +177,7 @@ def createSpoke(region, account, size = 22):
         privatea_res3 = json.loads(createFirstAddress(privatea['id'], 'Reserved by AWS'))
 
         description = account + ' Private subnet AZ B'
-        privateb = json.loads(requestSubnet(r['id'], 24, description, regionalInternalDNS[region]))
+        privateb = json.loads(requestSubnet(r['id'], 24, description, regionalSettings[region]['dns']))
         tmp = {'id': privateb['id'], 'subnet': privateb['data'], 'description': description}
         output['data'].append(tmp)
         privateb_gw = json.loads(createFirstAddress(privateb['id'], 'Default gateway', 1))
@@ -193,31 +218,34 @@ def createCfYaml(region, account, ipam, template):
     :rtype: str
     '''
 
-    global config, regionalInternalDNS, regionalTGWs
-
-    url = f"https://{config['server']}/api/{config['appid']}/tools/nameservers/{regionalInternalDNS[region]}/"
+    global config, regionalSettings 
     headers = {
             'token': config['token'],
             'Content-Type': 'application/json'
     }
     payload = ''
 
+    url = f"https://{config['server']}/api/{config['appid']}/tools/nameservers/{regionalSettings[region]['dns']}/"
     r = json.loads(requests.request("GET", url, headers=headers, data=payload).text)
     nameservers = r['data']['namesrv1'].split(';')
+
     tpl = Template(template)
     return tpl.render (
-        nameservers = nameservers,
-        account = account,
-        vpcCidr = ipam['data'][0]['subnet'],
-        privateAIp = ipam['data'][1]['subnet'],
-        privateADescription = ipam['data'][1]['description'],
-        privateBIp = ipam['data'][2]['subnet'],
-        privateBDescription = ipam['data'][2]['description'],
-        transitBIp = ipam['data'][3]['subnet'],
-        transitBDescription = ipam['data'][3]['description'],
-        transitAIp = ipam['data'][4]['subnet'],
-        transitADescription = ipam['data'][4]['description'],
-        transitGatewayId = regionalTGWs[region] 
+        'nameservers' = nameservers,
+        'account' = account,
+        'vpcCidr' = ipam['data'][0]['subnet'],
+        'privateAIp' = ipam['data'][1]['subnet'],
+        'privateADescription' = ipam['data'][1]['description'],
+        'privateBIp' = ipam['data'][2]['subnet'],
+        'privateBDescription' = ipam['data'][2]['description'],
+        'transitBIp' = ipam['data'][3]['subnet'],
+        'transitBDescription' = ipam['data'][3]['description'],
+        'transitAIp' = ipam['data'][4]['subnet'],
+        'transitADescription' = ipam['data'][4]['description'],
+        'transitGatewayId' = regionalSettings[region]['tgwId'],
+        'transitGatewayInspectionAttachment' = regionalSettings[region]['tgwInspectionAttachment'],
+        'transitGatewayMainRouteTable' = regionalSettings[region]['tgwMainRouteTable'],
+        'dhcpOptionsId' = regionalSettings[region]['dhcpOptions']
     )
 
 def main():
@@ -227,7 +255,7 @@ def main():
 
     loadConfig()
 
-    global config, regionalNetworks, regionalInternalDNS
+    global config, regionalSettings
 
     # Read input arguments
     argp = argparse.ArgumentParser(description = 'Create spoke network, request IP addresses from phpIPAM.')
@@ -242,7 +270,7 @@ def main():
     output = {'code': 0, 'success': 'false'}
     output['data'] = []
 
-    if region in regionalNetworks:
+    if region in regionalSettings:
         ipam = createSpoke(region, account, SPOKESIZE)
         if ipam['code'] == 200:
             output['code'] = 200

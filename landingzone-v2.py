@@ -156,7 +156,7 @@ def createSsVpc(region, cvpn):
 
     descriptionPrePend = 'Shared Services'
     description = descriptionPrePend + ' VpcCidr'
-    r = json.loads(requestSubnet(regionalSettings[region]['network'], 20, description, regionalSettings[region]['dns']))
+    r = json.loads(requestSubnet(regionalSettings[region]['network'], 19, description, regionalSettings[region]['dns']))
     if r['code'] == 201:
         tmp = {'id': r['id'], 'subnet': r['data'], 'description': description}
         output['data'].append(tmp)
@@ -210,21 +210,11 @@ def createSsVpc(region, cvpn):
         publica_res3 = json.loads(createFirstAddress(publica['id'], 'Reserved by AWS'))
 
         if cvpn:
-            description = descriptionPrePend + ' Public CVPN subnet AZ B'
-            cvpnb = json.loads(requestSubnet(r['id'], 28, description, regionalSettings[region]['dns'], 0, 'last'))
-            tmp = {'id': cvpnb['id'], 'subnet': cvpnb['data'], 'description': description}
-            output['data'].append(tmp)
-            cvpnb_gw = json.loads(createFirstAddress(cvpnb['id'], 'Default gateway', 1))
-            cvpnb_res2 = json.loads(createFirstAddress(cvpnb['id'], 'Reserved by AWS'))
-            cvpnb_res3 = json.loads(createFirstAddress(cvpnb['id'], 'Reserved by AWS'))
-    
-            description = descriptionPrePend + ' Public CVPN subnet AZ A'
-            cvpna = json.loads(requestSubnet(r['id'], 28, description, regionalSettings[region]['dns'], 0 , 'last'))
+            description = descriptionPrePend + ' CVPN subnet'
+            cvpna = json.loads(requestSubnet(r['id'], 22, description, regionalSettings[region]['dns'], 0, 'last'))
             tmp = {'id': cvpna['id'], 'subnet': cvpna['data'], 'description': description}
             output['data'].append(tmp)
             cvpna_gw = json.loads(createFirstAddress(cvpna['id'], 'Default gateway', 1))
-            cvpna_res2 = json.loads(createFirstAddress(cvpna['id'], 'Reserved by AWS'))
-            cvpna_res3 = json.loads(createFirstAddress(cvpna['id'], 'Reserved by AWS'))
 
         output['code'] = 200
         output['success'] = 'true'
@@ -343,44 +333,34 @@ def createCfYaml(region, ipam, template, cvpn = False):
         'region': region,
         'regionalCidr': regionalCidr,
         'ssVpcCidr': ipam[0][0]['subnet'],
-        'ssPrivateIp1': ipam[0][1]['subnet'],
-        'ssPrivateDescription1': ipam[0][1]['description'],
-        'ssPrivateIp2': ipam[0][2]['subnet'],
-        'ssPrivateDescription2': ipam[0][2]['description'],
-        'ssTransitIp2': ipam[0][3]['subnet'],
-        'ssTransitDescription2': ipam[0][3]['description'],
-        'ssTransitIp1': ipam[0][4]['subnet'],
-        'ssTransitDescription1': ipam[0][4]['description'],
-        'ssPublicIp2': ipam[0][5]['subnet'],
-        'ssPublicDescription2': ipam[0][5]['description'],
-        'ssPublicIp1': ipam[0][6]['subnet'],
-        'ssPublicDescription1': ipam[0][6]['description'],
-        'ssNatGateway1EIPName': 'Shared Services NAT Gateway AZ A External IP',
-        'ssNatGateway1Name': 'Shared Services NAT Gateway AZ A',
-        'ssNatGateway2EIPName': 'Shared Services NAT Gateway AZ B External IP',
-        'ssNatGateway2Name': 'Shared Services NAT Gateway AZ B',
-        'cvpn': cvpn,
+        'ssPrivateSubnet1': ipam[0][1]['subnet'],
+        'ssPrivateSubnet1Description': ipam[0][1]['description'],
+        'ssPrivateSubnet2': ipam[0][2]['subnet'],
+        'ssPrivateSubnet2Description': ipam[0][2]['description'],
+        'ssTransitSubnet2': ipam[0][3]['subnet'],
+        'ssTransitSubnet2Description': ipam[0][3]['description'],
+        'ssTransitSubnet1': ipam[0][4]['subnet'],
+        'ssTransitSubnet1Description': ipam[0][4]['description'],
+        'ssPublicSubnet2': ipam[0][5]['subnet'],
+        'ssPublicSubnet2Description': ipam[0][5]['description'],
+        'ssPublicSubnet1': ipam[0][6]['subnet'],
+        'ssPublicSubnet1Description': ipam[0][6]['description'],
         'veVpcCidr': ipam[1][0]['subnet'],
-        'vePrivateIp1': ipam[1][1]['subnet'],
-        'vePrivateDescription1': ipam[1][1]['description'],
-        'vePrivateIp2': ipam[1][2]['subnet'],
-        'vePrivateDescription2': ipam[1][2]['description'],
-        'vePublicIp1': ipam[1][3]['subnet'],
-        'vePublicDescription1': ipam[1][3]['description'],
-        'vePublicIp2': ipam[1][4]['subnet'],
-        'vePublicDescription2': ipam[1][4]['description'],
-        'veTransitIp2': ipam[1][5]['subnet'],
-        'veTransitDescription2': ipam[1][5]['description'],
-        'veTransitIp1': ipam[1][6]['subnet'],
-        'veTransitDescription1': ipam[1][6]['description'],
-        'TransitGatewayId': regionalSettings[region]['tgwId'],
-        'TransitGatewayMainRouteTable': regionalSettings[region]['tgwMainRouteTable'],
+        'vePrivateSubnet1': ipam[1][1]['subnet'],
+        'vePrivateSubnet1Description': ipam[1][1]['description'],
+        'vePrivateSubnet2': ipam[1][2]['subnet'],
+        'vePrivateSubnet2Description': ipam[1][2]['description'],
+        'vePublicSubnet1': ipam[1][3]['subnet'],
+        'vePublicSubnet1Description': ipam[1][3]['description'],
+        'vePublicSubnet2': ipam[1][4]['subnet'],
+        'vePublicSubnet2Description': ipam[1][4]['description'],
+        'veTransitSubnet2': ipam[1][5]['subnet'],
+        'veTransitSubnet2Description': ipam[1][5]['description'],
+        'veTransitSubnet1': ipam[1][6]['subnet'],
+        'veTransitSubnet1Description': ipam[1][6]['description'],
+        'TgId': regionalSettings[region]['tgwId'],
+        'TgMainRouteTable': regionalSettings[region]['tgwMainRouteTable'],
     }
-    if cvpn:
-        tplArgs['ssCvpnBIp'] = ipam[0][7]['subnet']
-        tplArgs['ssCvpnBDescription'] = ipam[0][7]['description']
-        tplArgs['ssCvpnAIp'] = ipam[0][8]['subnet']
-        tplArgs['ssCvpnADescription'] = ipam[0][8]['description']
 
     return tpl.render (tplArgs)
 

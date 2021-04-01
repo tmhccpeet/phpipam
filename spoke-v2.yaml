@@ -174,10 +174,16 @@ Resources:
       TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
       TransitGatewayRouteTableId: !Ref TransitGatewayRouteTable
 
-  FwTransitGatewayRouteTablePropagation:
+  TransitGatewayInspectionRouteTablePropagation:
     Type: AWS::EC2::TransitGatewayRouteTablePropagation
     Properties:
-      TransitGatewayAttachmentId: {{ transitGatewayInspectionAttachment }}
+      TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
+      TransitGatewayRouteTableId: {{ TransitGatewayInspectionRouteTable }}
+
+  TransitGatewayMainRouteTablePropagation:
+    Type: AWS::EC2::TransitGatewayRouteTablePropagation
+    Properties:
+      TransitGatewayAttachmentId: !Ref TransitGatewayAttachment
       TransitGatewayRouteTableId: {{ TransitGatewayMainRouteTable }}
 
 Outputs:
@@ -238,4 +244,6 @@ Outputs:
   TransitGatewayAttachment:
     Description: AWS ID of the Transit Gateway Attachment
     Value: !Ref TransitGatewayAttachment
+    Export:
+      Name: TransitGatewayAttachment
 

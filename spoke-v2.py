@@ -39,6 +39,7 @@ regionalSettings = {
         "tgwId": "tgw-0fc230fd5535b3ddf",
         "tgwInspectionAttachment": "",
         "tgwMainRouteTable": "",
+        "tgwInspectionRouteTable": "",
         "dhcpOptions": ""
     },
     "us-east-1": {
@@ -47,6 +48,7 @@ regionalSettings = {
         "tgwId": "tgw-0031a74e3b340a704",
         "tgwInspectionAttachment": "",
         "tgwMainRouteTable": "",
+        "tgwInspectionRouteTable": "",
         "dhcpOptions": ""
     },
     "eu-west-1": {
@@ -55,6 +57,7 @@ regionalSettings = {
         "tgwId": "tgw-0031a74e3b340a704",
         "tgwInspectionAttachment": "",
         "tgwMainRouteTable": "",
+        "tgwInspectionRouteTable": "",
         "dhcpOptions": ""
     },
     "eu-west-2": {
@@ -63,6 +66,7 @@ regionalSettings = {
         "tgwId": "tgw-000816d04ea49d358",
         "tgwInspectionAttachment": "",
         "tgwMainRouteTable": "",
+        "tgwInspectionRouteTable": "",
         "dhcpOptions": ""
     },
     "eu-central-1": {
@@ -71,6 +75,7 @@ regionalSettings = {
         "tgwId": "tgw-06173001949ff1ea2",
         "tgwInspectionAttachment": "tgw-attach-068d1df133ade8cac",
         "tgwMainRouteTable": "tgw-rtb-05f55e0d134692083",
+        "tgwInspectionRouteTable": "tgw-rtb-05f55e0d134692083",
         "dhcpOptions": "dopt-0a11e07c9afdbb7d8"
     }
 }
@@ -245,6 +250,7 @@ def createCfYaml(region, account, ipam, template):
         'transitGatewayId' = regionalSettings[region]['tgwId'],
         'transitGatewayInspectionAttachment' = regionalSettings[region]['tgwInspectionAttachment'],
         'transitGatewayMainRouteTable' = regionalSettings[region]['tgwMainRouteTable'],
+        'transitGatewayInspectionRouteTable' = regionalSettings[region]['tgwInspectionRouteTable'],
         'dhcpOptionsId' = regionalSettings[region]['dhcpOptions']
     )
 

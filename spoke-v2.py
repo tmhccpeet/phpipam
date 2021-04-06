@@ -236,22 +236,22 @@ def createCfYaml(region, account, ipam, template):
 
     tpl = Template(template)
     return tpl.render (
-        'nameservers' = nameservers,
-        'account' = account,
-        'vpcCidr' = ipam['data'][0]['subnet'],
-        'privateAIp' = ipam['data'][1]['subnet'],
-        'privateADescription' = ipam['data'][1]['description'],
-        'privateBIp' = ipam['data'][2]['subnet'],
-        'privateBDescription' = ipam['data'][2]['description'],
-        'transitBIp' = ipam['data'][3]['subnet'],
-        'transitBDescription' = ipam['data'][3]['description'],
-        'transitAIp' = ipam['data'][4]['subnet'],
-        'transitADescription' = ipam['data'][4]['description'],
-        'transitGatewayId' = regionalSettings[region]['tgwId'],
-        'transitGatewayInspectionAttachment' = regionalSettings[region]['tgwInspectionAttachment'],
-        'transitGatewayMainRouteTable' = regionalSettings[region]['tgwMainRouteTable'],
-        'transitGatewayInspectionRouteTable' = regionalSettings[region]['tgwInspectionRouteTable'],
-        'dhcpOptionsId' = regionalSettings[region]['dhcpOptions']
+        nameservers = nameservers,
+        account = account,
+        vpcCidr = ipam['data'][0]['subnet'],
+        privateAIp = ipam['data'][1]['subnet'],
+        privateADescription = ipam['data'][1]['description'],
+        privateBIp = ipam['data'][2]['subnet'],
+        privateBDescription = ipam['data'][2]['description'],
+        transitBIp = ipam['data'][3]['subnet'],
+        transitBDescription = ipam['data'][3]['description'],
+        transitAIp = ipam['data'][4]['subnet'],
+        transitADescription = ipam['data'][4]['description'],
+        transitGatewayId = regionalSettings[region]['tgwId'],
+        transitGatewayInspectionAttachment = regionalSettings[region]['tgwInspectionAttachment'],
+        transitGatewayMainRouteTable = regionalSettings[region]['tgwMainRouteTable'],
+        transitGatewayInspectionRouteTable = regionalSettings[region]['tgwInspectionRouteTable'],
+        dhcpOptionsId = regionalSettings[region]['dhcpOptions']
     )
 
 def main():
@@ -271,7 +271,7 @@ def main():
     args = argp.parse_args()
     region = args.region[0]
     account = args.account[0]
-    template = args.template[0]
+    template = args.template
 
     output = {'code': 0, 'success': 'false'}
     output['data'] = []

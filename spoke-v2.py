@@ -267,7 +267,7 @@ def main():
     argp = argparse.ArgumentParser(description = 'Create spoke network, request IP addresses from phpIPAM.')
     argp.add_argument('region', type=str, nargs=1, help='AWS region where the spoke resides')
     argp.add_argument('account', type=str, nargs=1, help='Account name')
-    argp.add_argument('template', type=str, nargs=1, help='Template file name')
+    argp.add_argument('template', type=str, help='Template file name')
     args = argp.parse_args()
     region = args.region[0]
     account = args.account[0]

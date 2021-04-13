@@ -2,6 +2,9 @@
 *config.json
 *.csv
 
+# Vi temp/swap/backup files
+*~
+
 ### Anything below here was added by the GitHub Python template ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
